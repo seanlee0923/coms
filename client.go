@@ -36,7 +36,7 @@ func (c *Client) GetId() string {
 	return c.id
 }
 
-func RunClient(c *Client) {
+func (c *Client) Run() {
 	go c.readLoop()
 	go c.writeLoop()
 }
@@ -69,10 +69,15 @@ func (c *Client) readLoop() {
 			return
 		}
 
-		resp := h(c, message)
-		if resp == nil {
+		respData := h(c, message)
+		if respData == nil {
 			c.closeCh <- true
 			return
+		}
+
+		resp := protocol.Message{
+			Action: message.Action,
+			Data:   respData,
 		}
 
 		msgOut, err := resp.ToBytes()

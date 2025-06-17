@@ -4,6 +4,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -24,7 +25,7 @@ type address struct {
 	path string
 }
 
-type Handler func(*Client, *protocol.Message) *protocol.Message
+type Handler func(*Client, *protocol.Message) *protocol.Data
 
 func NewServer(addr, path string, u *websocket.Upgrader) *OperationServer {
 	if u == nil {
@@ -57,7 +58,20 @@ func (s *OperationServer) GetHandler(action string) Handler {
 }
 
 func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) error {
+	if h == nil {
+		h = func(w http.ResponseWriter, r *http.Request) {
+			conn, err := s.u.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			path := strings.Split(r.URL.Path, "/")
+			clientId := path[len(path)-1]
+			client := NewClient(clientId, conn)
+			go client.Run()
+			s.Add(client)
+		}
 
+	}
 	http.HandleFunc(s.addr.path, h)
 
 	return http.ListenAndServe(s.addr.addr, nil)
