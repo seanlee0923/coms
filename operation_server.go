@@ -36,6 +36,7 @@ func NewServer(addr, path string, u *websocket.Upgrader) *OperationServer {
 		clients: make(map[string]*Client),
 		u:       *u,
 	}
+
 	s = server
 
 	return server
@@ -61,4 +62,23 @@ func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) erro
 
 	return http.ListenAndServe(s.addr.addr, nil)
 
+}
+
+func (s *OperationServer) Remove(c *Client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.clients, c.id)
+}
+
+func (s *OperationServer) Add(c *Client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[c.id] = c
+}
+
+func (s *OperationServer) GetClient(id string) (*Client, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.clients[id]
+	return c, ok
 }

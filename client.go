@@ -3,7 +3,6 @@ package coms
 import (
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
-	"runtime"
 	"sync"
 )
 
@@ -38,62 +37,61 @@ func (c *Client) GetId() string {
 }
 
 func RunClient(c *Client) {
-	go func() {
-		for {
-			if !c.readLoop() {
-				break
-			}
-		}
-	}()
-
-	go func() {
-		if !c.writeLoop() {
-			runtime.Breakpoint()
-		}
-	}()
+	go c.readLoop()
+	go c.writeLoop()
 }
 
-func (c *Client) readLoop() bool {
-	_, msg, err := c.conn.ReadMessage()
-	if err != nil {
-		c.closeCh <- true
-		return false
+func (c *Client) readLoop() {
+
+	defer s.Remove(c)
+
+	for {
+		_, msg, err := c.conn.ReadMessage()
+		if err != nil {
+			c.closeCh <- true
+			return
+		}
+
+		message, err := protocol.ToMessage(msg)
+		if err != nil {
+			c.closeCh <- true
+			return
+		}
+
+		if message == nil {
+			c.closeCh <- true
+			return
+		}
+
+		h := s.GetHandler(message.Action)
+		if h == nil {
+			c.closeCh <- true
+			return
+		}
+
+		resp := h(c, message)
+		if resp == nil {
+			c.closeCh <- true
+			return
+		}
+
+		msgOut, err := resp.ToBytes()
+		if err != nil {
+			c.closeCh <- true
+			return
+		}
+
+		c.messageOut <- msgOut
+
 	}
 
-	message, err := protocol.ToMessage(msg)
-	if err != nil {
-		c.closeCh <- true
-		return false
-	}
-
-	if message == nil {
-		c.closeCh <- true
-		return false
-	}
-
-	h := s.GetHandler(message.Action)
-	if h == nil {
-		c.closeCh <- true
-		return false
-	}
-
-	resp := h(c, message)
-	if resp == nil {
-		c.closeCh <- true
-		return false
-	}
-
-	msgOut, err := resp.ToBytes()
-	if err != nil {
-		c.closeCh <- true
-		return false
-	}
-
-	c.messageOut <- msgOut
-
-	return true
 }
 
-func (c *Client) writeLoop() bool {
-	return true
+func (c *Client) writeLoop() {
+
+	defer s.Remove(c)
+
+	for {
+		return
+	}
 }
