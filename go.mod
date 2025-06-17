@@ -1,4 +1,4 @@
-module github.com/seanlee0923/server-manager
+module github.com/seanlee0923/coms
 
 go 1.23.0
 
