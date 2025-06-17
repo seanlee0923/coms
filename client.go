@@ -11,6 +11,13 @@ type Client struct {
 	conn   *websocket.Conn
 	mu     sync.Mutex
 	timout protocol.TimeOutConfig
+
+	pingCh     chan []byte
+	messageIn  chan []byte
+	messageOut chan []byte
+	closeCh    chan bool
+
+	connected bool
 }
 
 func NewClient(id string, conn *websocket.Conn) *Client {
