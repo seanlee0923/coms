@@ -4,6 +4,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
 	"sync"
+	"time"
 )
 
 type Client struct {
@@ -13,7 +14,6 @@ type Client struct {
 	timout protocol.TimeOutConfig
 
 	pingCh     chan []byte
-	messageIn  chan []byte
 	messageOut chan []byte
 	closeCh    chan bool
 
@@ -21,15 +21,22 @@ type Client struct {
 }
 
 func NewClient(id string, conn *websocket.Conn) *Client {
-	return &Client{
+
+	cli := &Client{
 		id:   id,
 		conn: conn,
 
 		pingCh:     make(chan []byte),
-		messageIn:  make(chan []byte),
 		messageOut: make(chan []byte),
 		closeCh:    make(chan bool),
 	}
+
+	cli.conn.SetPingHandler(func(appData string) error {
+		cli.pingCh <- []byte(appData)
+		return cli.conn.SetWriteDeadline(time.Now().Add(cli.timout.PingWait))
+	})
+
+	return cli
 }
 
 func (c *Client) GetId() string {
@@ -97,6 +104,45 @@ func (c *Client) writeLoop() {
 	defer s.Remove(c)
 
 	for {
-		return
+
+		select {
+
+		case msg, ok := <-c.messageOut:
+			if !ok {
+				c.closeCh <- true
+				return
+			}
+
+			writer, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				c.closeCh <- true
+				return
+			}
+
+			_, err = writer.Write(msg)
+			if err != nil {
+				c.closeCh <- true
+				return
+			}
+
+		case <-c.pingCh:
+
+			err := c.conn.WriteMessage(websocket.PongMessage, []byte{})
+			if err != nil {
+				c.closeCh <- true
+				return
+			}
+
+		case <-c.closeCh:
+
+			cm := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
+			err := c.conn.WriteMessage(websocket.CloseMessage, cm)
+			if err != nil {
+				_ = c.conn.NetConn().Close()
+				break
+			}
+
+		}
+
 	}
 }
