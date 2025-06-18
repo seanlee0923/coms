@@ -89,6 +89,7 @@ func (c *Client) readLoop(w WebSocketInstance) {
 					callCh <- message
 				}
 			}
+			continue
 		}
 
 		h := w.getHandler(message.Action)
