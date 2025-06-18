@@ -14,19 +14,21 @@ type Client struct {
 	timout protocol.TimeOutConfig
 
 	pingCh     chan []byte
+	messageIn  chan []byte
 	messageOut chan []byte
 	closeCh    chan bool
 
 	connected bool
 }
 
-func NewClient(id string, conn *websocket.Conn) *Client {
+func makeClient(id string, conn *websocket.Conn) *Client {
 
 	cli := &Client{
 		id:   id,
 		conn: conn,
 
 		pingCh:     make(chan []byte),
+		messageIn:  make(chan []byte),
 		messageOut: make(chan []byte),
 		closeCh:    make(chan bool),
 	}
@@ -39,11 +41,11 @@ func NewClient(id string, conn *websocket.Conn) *Client {
 	return cli
 }
 
-func (c *Client) GetId() string {
+func (c *Client) getId() string {
 	return c.id
 }
 
-func (c *Client) Run() {
+func (c *Client) run() {
 	go c.readLoop()
 	go c.writeLoop()
 }

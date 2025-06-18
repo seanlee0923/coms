@@ -67,8 +67,8 @@ func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) erro
 			}
 			path := strings.Split(r.URL.Path, "/")
 			clientId := path[len(path)-1]
-			client := NewClient(clientId, conn)
-			go client.Run()
+			client := makeClient(clientId, conn)
+			go client.run()
 			s.Add(client)
 		}
 
