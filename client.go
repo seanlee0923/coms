@@ -170,7 +170,7 @@ func (c *Client) writeLoop() {
 	}
 }
 
-func (c *Client) Call(data any, action string) (*protocol.Message, error) {
+func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 
 	if c.pendingCnt.Load() >= int32(c.maxPendingCalls) {
 		return nil, errors.New("max pending calls exceeded")

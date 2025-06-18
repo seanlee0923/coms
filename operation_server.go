@@ -39,6 +39,7 @@ func NewServer(addr, path string, u *websocket.Upgrader) *OperationServer {
 		clients:        make(map[string]*Client),
 		u:              *u,
 		maxPendingCall: 32,
+		handler:        make(map[string]Handler),
 	}
 
 	s = server
