@@ -18,7 +18,7 @@ type OperationServer struct {
 	mu      sync.Mutex
 	u       websocket.Upgrader
 
-	handler map[string]*Handler
+	handler map[string]Handler
 }
 
 type address struct {
@@ -47,13 +47,16 @@ func NewServer(addr, path string, u *websocket.Upgrader) *OperationServer {
 func (s *OperationServer) RegisterHandler(action string, handler Handler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.handler[action] = &handler
+	s.handler[action] = handler
 }
 
-func (s *OperationServer) GetHandler(action string) Handler {
+func (s *OperationServer) getHandler(action string) Handler {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	h, ok := s.handler[action]
 	if ok {
-		return *h
+		return h
 	}
 	return nil
 }

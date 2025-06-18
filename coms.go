@@ -5,6 +5,10 @@ import (
 	"net/http"
 )
 
+type WebSocketInstance interface {
+	getHandler(string) Handler
+}
+
 func DefaultUpgrade() (u *websocket.Upgrader) {
 	return &websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {

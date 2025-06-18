@@ -13,6 +13,8 @@ type Client struct {
 	mu     sync.Mutex
 	timout protocol.TimeOutConfig
 
+	handler map[string]Handler
+
 	pingCh     chan []byte
 	messageIn  chan []byte
 	messageOut chan []byte
@@ -46,11 +48,11 @@ func (c *Client) getId() string {
 }
 
 func (c *Client) run() {
-	go c.readLoop()
+	go c.readLoop(s)
 	go c.writeLoop()
 }
 
-func (c *Client) readLoop() {
+func (c *Client) readLoop(w WebSocketInstance) {
 
 	defer s.Remove(c)
 
@@ -72,7 +74,7 @@ func (c *Client) readLoop() {
 			return
 		}
 
-		h := s.GetHandler(message.Action)
+		h := s.getHandler(message.Action)
 		if h == nil {
 			c.closeCh <- true
 			return
@@ -147,4 +149,11 @@ func (c *Client) writeLoop() {
 		}
 
 	}
+}
+
+func (c *Client) getHandler(action string) Handler {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.handler[action]
 }
