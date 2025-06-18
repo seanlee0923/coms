@@ -1,6 +1,7 @@
 package coms
 
 import (
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
 	"net/http"
@@ -25,7 +26,7 @@ type address struct {
 	path string
 }
 
-type Handler func(*Client, *protocol.Message) *protocol.Data
+type Handler func(*Client, *protocol.Message) *json.RawMessage
 
 func NewServer(addr, path string, u *websocket.Upgrader) *OperationServer {
 	if u == nil {

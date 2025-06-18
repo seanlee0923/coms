@@ -3,22 +3,19 @@ package protocol
 import "encoding/json"
 
 type Message struct {
-	Action string `json:"action"`
-	Data   Data   `json:"data"`
+	Action string          `json:"action"`
+	Data   json.RawMessage `json:"data"`
 }
 
-type Data any
-
 func ToMessage(message []byte) (*Message, error) {
-	var rawMsg []json.RawMessage
 	var msg Message
-	err := json.Unmarshal(message, &rawMsg)
+
+	err := json.Unmarshal(message, &msg)
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(rawMsg[0], &msg)
 
-	return nil, nil
+	return &msg, nil
 }
 
 func (m *Message) ToBytes() ([]byte, error) {

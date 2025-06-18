@@ -84,7 +84,7 @@ func (c *Client) readLoop() {
 
 		resp := protocol.Message{
 			Action: message.Action,
-			Data:   respData,
+			Data:   *respData,
 		}
 
 		msgOut, err := resp.ToBytes()
