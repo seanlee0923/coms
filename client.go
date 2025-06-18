@@ -1,8 +1,12 @@
 package coms
 
 import (
+	"encoding/json"
+	"errors"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
+	"sync"
 	"time"
 )
 
@@ -19,9 +23,16 @@ type Client struct {
 	closeCh    chan bool
 
 	connected bool
+
+	pendingCalls sync.Map
 }
 
-func makeClient(id string, conn *websocket.Conn) *Client {
+type dispatchReq struct {
+	msg    *protocol.Message
+	respCh chan *protocol.Message
+}
+
+func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
 
 	cli := &Client{
 		id:   id,
@@ -72,6 +83,13 @@ func (c *Client) readLoop(w WebSocketInstance) {
 			c.closeCh <- true
 			return
 		}
+		if message.Type == protocol.Resp {
+			if call, ok := c.pendingCalls.Load(message.Id); ok {
+				if callCh, ok := call.(chan *protocol.Message); ok {
+					callCh <- message
+				}
+			}
+		}
 
 		h := w.getHandler(message.Action)
 		if h == nil {
@@ -86,6 +104,8 @@ func (c *Client) readLoop(w WebSocketInstance) {
 		}
 
 		resp := protocol.Message{
+			Id:     uuid.NewString(),
+			Type:   protocol.Resp,
 			Action: message.Action,
 			Data:   *respData,
 		}
@@ -148,6 +168,42 @@ func (c *Client) writeLoop() {
 		}
 
 	}
+}
+
+func (c *Client) Call(data any, action string) (*protocol.Message, error) {
+
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	req := &protocol.Message{
+		Id:     uuid.NewString(),
+		Type:   protocol.Req,
+		Action: action,
+		Data:   raw,
+	}
+
+	respCh := make(chan *protocol.Message, 1)
+	c.pendingCalls.Store(req.Id, respCh)
+	defer c.pendingCalls.Delete(req.Id)
+
+	msgBytes, err := req.ToBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	c.messageOut <- msgBytes
+	select {
+
+	case resp := <-respCh:
+		return resp, nil
+
+	case <-time.After(c.timout.ReadWait):
+		return nil, errors.New("timeout")
+
+	}
+
 }
 
 func (c *Client) getHandler(action string) Handler {

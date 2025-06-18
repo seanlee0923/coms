@@ -13,12 +13,13 @@ var s *OperationServer
 
 type OperationServer struct {
 	addr    address
-	timout  protocol.TimeOutConfig
+	timeOut protocol.TimeOutConfig
 	clients map[string]*Client
 	mu      sync.Mutex
 	u       websocket.Upgrader
 
-	handler map[string]Handler
+	handler        map[string]Handler
+	maxPendingCall int
 }
 
 type address struct {
@@ -34,9 +35,10 @@ func NewServer(addr, path string, u *websocket.Upgrader) *OperationServer {
 	}
 
 	server := &OperationServer{
-		addr:    address{addr: addr, path: path},
-		clients: make(map[string]*Client),
-		u:       *u,
+		addr:           address{addr: addr, path: path},
+		clients:        make(map[string]*Client),
+		u:              *u,
+		maxPendingCall: 32,
 	}
 
 	s = server
@@ -70,7 +72,7 @@ func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) erro
 			}
 			path := strings.Split(r.URL.Path, "/")
 			clientId := path[len(path)-1]
-			client := makeClient(clientId, conn)
+			client := s.makeClient(clientId, conn)
 			go client.run()
 			s.Add(client)
 		}

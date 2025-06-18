@@ -2,7 +2,17 @@ package protocol
 
 import "encoding/json"
 
+const (
+	Req MessageType = iota
+	Resp
+	Err
+)
+
+type MessageType int
+
 type Message struct {
+	Id     string          `json:"id"`
+	Type   MessageType     `json:"type"`
 	Action string          `json:"action"`
 	Data   json.RawMessage `json:"data"`
 }
