@@ -3,14 +3,12 @@ package coms
 import (
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
-	"sync"
 	"time"
 )
 
 type Client struct {
 	id     string
 	conn   *websocket.Conn
-	mu     sync.Mutex
 	timout protocol.TimeOutConfig
 
 	handler map[string]Handler
@@ -32,7 +30,8 @@ func makeClient(id string, conn *websocket.Conn) *Client {
 		pingCh:     make(chan []byte),
 		messageIn:  make(chan []byte),
 		messageOut: make(chan []byte),
-		closeCh:    make(chan bool),
+		closeCh:    make(chan bool, 1),
+		handler:    make(map[string]Handler),
 	}
 
 	cli.conn.SetPingHandler(func(appData string) error {
@@ -74,7 +73,7 @@ func (c *Client) readLoop(w WebSocketInstance) {
 			return
 		}
 
-		h := s.getHandler(message.Action)
+		h := w.getHandler(message.Action)
 		if h == nil {
 			c.closeCh <- true
 			return
@@ -152,8 +151,5 @@ func (c *Client) writeLoop() {
 }
 
 func (c *Client) getHandler(action string) Handler {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	return c.handler[action]
 }
