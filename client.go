@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/protocol"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,12 +25,9 @@ type Client struct {
 
 	connected bool
 
-	pendingCalls sync.Map
-}
-
-type dispatchReq struct {
-	msg    *protocol.Message
-	respCh chan *protocol.Message
+	pendingCalls    sync.Map
+	pendingCnt      atomic.Int32
+	maxPendingCalls int
 }
 
 func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
@@ -38,11 +36,12 @@ func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
 		id:   id,
 		conn: conn,
 
-		pingCh:     make(chan []byte),
-		messageIn:  make(chan []byte),
-		messageOut: make(chan []byte),
-		closeCh:    make(chan bool, 1),
-		handler:    make(map[string]Handler),
+		pingCh:          make(chan []byte),
+		messageIn:       make(chan []byte),
+		messageOut:      make(chan []byte),
+		closeCh:         make(chan bool, 1),
+		handler:         make(map[string]Handler),
+		maxPendingCalls: s.maxPendingCall,
 	}
 
 	cli.conn.SetPingHandler(func(appData string) error {
@@ -173,6 +172,10 @@ func (c *Client) writeLoop() {
 
 func (c *Client) Call(data any, action string) (*protocol.Message, error) {
 
+	if c.pendingCnt.Load() >= int32(c.maxPendingCalls) {
+		return nil, errors.New("max pending calls exceeded")
+	}
+
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
@@ -187,7 +190,11 @@ func (c *Client) Call(data any, action string) (*protocol.Message, error) {
 
 	respCh := make(chan *protocol.Message, 1)
 	c.pendingCalls.Store(req.Id, respCh)
-	defer c.pendingCalls.Delete(req.Id)
+	c.pendingCnt.Add(1)
+	defer func() {
+		c.pendingCalls.Delete(req.Id)
+		c.pendingCnt.Add(-1)
+	}()
 
 	msgBytes, err := req.ToBytes()
 	if err != nil {
