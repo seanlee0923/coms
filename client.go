@@ -5,11 +5,16 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/seanlee0923/coms/logger"
 	"github.com/seanlee0923/coms/protocol"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+func init() {
+	logger.Init()
+}
 
 type Client struct {
 	id     string
@@ -68,12 +73,14 @@ func (c *Client) readLoop(w WebSocketInstance) {
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
+			logger.Error(err)
 			c.closeCh <- true
 			return
 		}
 
 		message, err := protocol.ToMessage(msg)
 		if err != nil {
+			logger.Error(err)
 			c.closeCh <- true
 			return
 		}
@@ -112,6 +119,7 @@ func (c *Client) readLoop(w WebSocketInstance) {
 
 		msgOut, err := resp.ToBytes()
 		if err != nil {
+			logger.Error(err)
 			c.closeCh <- true
 			return
 		}
@@ -131,6 +139,7 @@ func (c *Client) writeLoop() {
 		select {
 
 		case msg, ok := <-c.messageOut:
+			logger.InfoF("message out :%s", string(msg))
 			if !ok {
 				c.closeCh <- true
 				return
@@ -138,12 +147,14 @@ func (c *Client) writeLoop() {
 
 			writer, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
+				logger.Error(err)
 				c.closeCh <- true
 				return
 			}
 
 			_, err = writer.Write(msg)
 			if err != nil {
+				logger.Error(err)
 				c.closeCh <- true
 				return
 			}
@@ -152,6 +163,7 @@ func (c *Client) writeLoop() {
 
 			err := c.conn.WriteMessage(websocket.PongMessage, []byte{})
 			if err != nil {
+				logger.Error(err)
 				c.closeCh <- true
 				return
 			}
@@ -161,6 +173,7 @@ func (c *Client) writeLoop() {
 			cm := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
 			err := c.conn.WriteMessage(websocket.CloseMessage, cm)
 			if err != nil {
+				logger.Error(err)
 				_ = c.conn.NetConn().Close()
 				break
 			}
@@ -178,6 +191,7 @@ func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 
 	raw, err := json.Marshal(data)
 	if err != nil {
+		logger.Error(err)
 		return nil, err
 	}
 
@@ -198,6 +212,7 @@ func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 
 	msgBytes, err := req.ToBytes()
 	if err != nil {
+		logger.Error(err)
 		return nil, err
 	}
 
