@@ -33,10 +33,13 @@ type Client struct {
 	pendingCalls    sync.Map
 	pendingCnt      atomic.Int32
 	maxPendingCalls int
+
+	heartBeatPeriod time.Duration
+	collectPeriod   time.Duration
 }
 
 func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
-
+	logger.Info("add client")
 	cli := &Client{
 		id:   id,
 		conn: conn,
@@ -72,26 +75,32 @@ func (c *Client) readLoop(w WebSocketInstance) {
 
 	for {
 		_, msg, err := c.conn.ReadMessage()
+		logger.InfoF("%s | %s", c.id, string(msg))
+
 		if err != nil {
 			logger.Error(err)
 			c.closeCh <- true
-			return
+			break
 		}
 
 		message, err := protocol.ToMessage(msg)
 		if err != nil {
 			logger.Error(err)
 			c.closeCh <- true
-			return
+			break
 		}
 
 		if message == nil {
 			c.closeCh <- true
-			return
+			break
 		}
+
 		if message.Type == protocol.Resp {
+			logger.Info("got resp message")
 			if call, ok := c.pendingCalls.Load(message.Id); ok {
+				logger.Info("got call")
 				if callCh, ok := call.(chan *protocol.Message); ok {
+					logger.Info("got call channel")
 					callCh <- message
 				}
 			}
@@ -101,13 +110,13 @@ func (c *Client) readLoop(w WebSocketInstance) {
 		h := w.getHandler(message.Action)
 		if h == nil {
 			c.closeCh <- true
-			return
+			break
 		}
 
 		respData := h(c, message)
 		if respData == nil {
 			c.closeCh <- true
-			return
+			break
 		}
 
 		resp := protocol.Message{
@@ -139,7 +148,6 @@ func (c *Client) writeLoop() {
 		select {
 
 		case msg, ok := <-c.messageOut:
-			logger.InfoF("message out :%s", string(msg))
 			if !ok {
 				c.closeCh <- true
 				return
@@ -158,6 +166,7 @@ func (c *Client) writeLoop() {
 				c.closeCh <- true
 				return
 			}
+			logger.InfoF("send to %s", c.id)
 
 		case <-c.pingCh:
 
@@ -220,6 +229,7 @@ func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 	select {
 
 	case resp := <-respCh:
+		logger.InfoF("resp : %v", resp)
 		return resp, nil
 
 	case <-time.After(c.timout.ReadWait):
