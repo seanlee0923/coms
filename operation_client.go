@@ -43,7 +43,7 @@ func (c *Client) Start(addr string) error {
 		return errors.New("heart beat period too small")
 	}
 
-	conn, _, err := websocket.DefaultDialer.Dial(addr, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(addr+c.id, nil)
 	if err != nil {
 		return err
 	}
