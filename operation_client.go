@@ -2,6 +2,7 @@ package coms
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/logger"
 	"github.com/seanlee0923/coms/protocol"
@@ -28,7 +29,20 @@ func (c *Client) SetTimeout(tc protocol.TimeOutConfig) {
 	c.timout = tc
 }
 
+func (c *Client) SetPeriod(collect, heartBeat time.Duration) {
+	c.collectPeriod = collect
+	c.heartBeatPeriod = heartBeat
+}
+
 func (c *Client) Start(addr string) error {
+
+	if c.collectPeriod <= protocol.MinCollectDuration {
+		return errors.New("collect period too small")
+	}
+	if c.heartBeatPeriod <= protocol.MinHeartBeatDuration {
+		return errors.New("heart beat period too small")
+	}
+
 	conn, _, err := websocket.DefaultDialer.Dial(addr, nil)
 	if err != nil {
 		return err
@@ -62,6 +76,7 @@ func (c *Client) start() {
 	go c.readLoop(c)
 	go c.writeLoop()
 	go c.collectStatus()
+	go c.heartBeat()
 }
 
 func (c *Client) collectStatus() {
