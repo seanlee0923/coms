@@ -1,6 +1,7 @@
 package coms
 
 import (
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/logger"
 	"github.com/seanlee0923/coms/protocol"
@@ -36,6 +37,25 @@ func (c *Client) Start(addr string) error {
 
 	go c.start()
 	return nil
+}
+
+func (c *Client) heartBeat() {
+	ticker := time.NewTicker(c.heartBeatPeriod)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		resp, err := c.Call("HeartBeat", protocol.HeartBeatReq{})
+		if err != nil {
+			continue
+		}
+		var hb protocol.HeartBeatResp
+		err = json.Unmarshal(resp.Data, &hb)
+		if err != nil {
+			continue
+		}
+
+		logger.InfoF("Heart Beat Status:%v", hb.Ok)
+	}
 }
 
 func (c *Client) start() {
