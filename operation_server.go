@@ -85,10 +85,10 @@ func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) erro
 
 }
 
-func (s *OperationServer) Remove(c *Client) {
+func (s *OperationServer) Remove(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.clients, c.id)
+	delete(s.clients, id)
 }
 
 func (s *OperationServer) Add(c *Client) {

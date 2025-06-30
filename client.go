@@ -71,7 +71,7 @@ func (c *Client) run() {
 
 func (c *Client) readLoop(w WebSocketInstance) {
 
-	defer s.Remove(c)
+	defer s.Remove(c.id)
 
 	for {
 		_, msg, err := c.conn.ReadMessage()
@@ -80,7 +80,7 @@ func (c *Client) readLoop(w WebSocketInstance) {
 		if err != nil {
 			logger.Error(err)
 			c.closeCh <- true
-			break
+			return
 		}
 
 		message, err := protocol.ToMessage(msg)
@@ -141,7 +141,7 @@ func (c *Client) readLoop(w WebSocketInstance) {
 
 func (c *Client) writeLoop() {
 
-	defer s.Remove(c)
+	defer s.Remove(c.id)
 
 	for {
 
@@ -166,7 +166,7 @@ func (c *Client) writeLoop() {
 				c.closeCh <- true
 				return
 			}
-			logger.InfoF("send to %s", c.id)
+			logger.InfoF("send %s \nto %s", string(msg), c.id)
 
 		case <-c.pingCh:
 
@@ -224,6 +224,8 @@ func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 		logger.Error(err)
 		return nil, err
 	}
+
+	logger.Info(string(msgBytes))
 
 	c.messageOut <- msgBytes
 	select {
