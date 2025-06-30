@@ -27,7 +27,7 @@ func NewClient(id string, maxPendingCalls int) *Client {
 }
 
 func (c *Client) SetTimeout(tc protocol.TimeOutConfig) {
-	c.timout = tc
+	c.timeout = tc
 }
 
 func (c *Client) SetPeriod(collect, heartBeat time.Duration) {
@@ -81,7 +81,9 @@ func (c *Client) start() {
 }
 
 func (c *Client) readLoopClient(w WebSocketInstance) {
-
+	c.conn.SetPongHandler(func(appData string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(c.timeout.PingWait))
+	})
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		logger.InfoF("%s | %s", c.id, string(msg))

@@ -17,9 +17,9 @@ func init() {
 }
 
 type Client struct {
-	id     string
-	conn   *websocket.Conn
-	timout protocol.TimeOutConfig
+	id      string
+	conn    *websocket.Conn
+	timeout protocol.TimeOutConfig
 
 	handler map[string]Handler
 
@@ -54,7 +54,7 @@ func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
 
 	cli.conn.SetPingHandler(func(appData string) error {
 		cli.pingCh <- []byte(appData)
-		return cli.conn.SetWriteDeadline(time.Now().Add(cli.timout.PingWait))
+		return cli.conn.SetWriteDeadline(time.Now().Add(cli.timeout.PingWait))
 	})
 
 	return cli
@@ -234,7 +234,7 @@ func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 		logger.InfoF("resp : %v", resp)
 		return resp, nil
 
-	case <-time.After(c.timout.ReadWait):
+	case <-time.After(c.timeout.ReadWait):
 		return nil, errors.New("timeout")
 
 	}
