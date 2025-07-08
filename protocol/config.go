@@ -8,8 +8,8 @@ const (
 )
 
 type TimeOutConfig struct {
-	PingWait   time.Duration
+	PingPeriod time.Duration
+	PongWait   time.Duration
 	WriteWait  time.Duration
 	ReadWait   time.Duration
-	PingPeriod time.Duration
 }

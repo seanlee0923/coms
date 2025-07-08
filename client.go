@@ -54,7 +54,7 @@ func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
 
 	cli.conn.SetPingHandler(func(appData string) error {
 		cli.pingCh <- []byte(appData)
-		return cli.conn.SetWriteDeadline(time.Now().Add(cli.timeout.PingWait))
+		return cli.conn.SetWriteDeadline(time.Now().Add(cli.timeout.PingPeriod))
 	})
 
 	return cli

@@ -82,7 +82,7 @@ func (c *Client) start() {
 
 func (c *Client) readLoopClient(w WebSocketInstance) {
 	c.conn.SetPongHandler(func(appData string) error {
-		return c.conn.SetReadDeadline(time.Now().Add(c.timeout.PingWait))
+		return c.conn.SetReadDeadline(time.Now().Add(c.timeout.PongWait))
 	})
 	for {
 		_, msg, err := c.conn.ReadMessage()
@@ -192,7 +192,7 @@ func (c *Client) writeLoopClient() {
 			err := c.conn.WriteMessage(websocket.CloseMessage, cm)
 			if err != nil {
 				logger.Error(err)
-				_ = c.conn.NetConn().Close()
+				_ = c.conn.Close()
 				break
 			}
 
