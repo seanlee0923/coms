@@ -3,6 +3,7 @@ package coms
 import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
+	"github.com/seanlee0923/coms/logger"
 	"github.com/seanlee0923/coms/protocol"
 	"net/http"
 	"strings"
@@ -76,6 +77,7 @@ func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) erro
 			client := s.makeClient(clientId, conn)
 			go client.run(s)
 			s.Add(client)
+			logger.Info("add client")
 		}
 
 	}

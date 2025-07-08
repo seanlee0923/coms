@@ -70,6 +70,9 @@ func (c *OperationClient) Start(addr string) error {
 	if c.heartBeatPeriod <= protocol.MinHeartBeatDuration {
 		return errors.New("heart beat period too small")
 	}
+	if c.timeout == (protocol.TimeOutConfig{}) {
+		return errors.New("need to set timeout config")
+	}
 
 	conn, _, err := websocket.DefaultDialer.Dial(addr+c.id, nil)
 	if err != nil {
@@ -81,8 +84,52 @@ func (c *OperationClient) Start(addr string) error {
 	return nil
 }
 
+func (c *OperationClient) RegisterHandler(action string, handler ClientHandler) {
+	c.handler[action] = handler
+}
+
 func (c *OperationClient) Send(action string, data any) (*protocol.Message, error) {
-	return nil, nil
+
+	raw, err := json.Marshal(data)
+	if err != nil {
+		logger.Error(err)
+		return nil, err
+	}
+
+	req := &protocol.Message{
+		Id:     uuid.NewString(),
+		Type:   protocol.Req,
+		Action: action,
+		Data:   raw,
+	}
+
+	respCh := make(chan *protocol.Message, 1)
+	c.pendingCalls.Store(req.Id, respCh)
+	c.pendingCnt.Add(1)
+	defer func() {
+		c.pendingCalls.Delete(req.Id)
+		c.pendingCnt.Add(-1)
+	}()
+
+	msgBytes, err := req.ToBytes()
+	if err != nil {
+		logger.Error(err)
+		return nil, err
+	}
+
+	c.messageOut <- msgBytes
+
+	select {
+
+	case resp := <-respCh:
+		logger.InfoF("resp : %v", string(resp.Data))
+		return resp, nil
+
+	case <-time.After(c.timeout.ReadWait):
+		return nil, errors.New("timeout")
+
+	}
+
 }
 
 func (c *OperationClient) heartBeat() {
@@ -137,12 +184,12 @@ func (c *OperationClient) readLoopClient() {
 			break
 		}
 
-		if message.Type == protocol.Req {
-
+		if message.Type == protocol.Resp {
+			logger.Info("got resp message")
 			if call, ok := c.pendingCalls.Load(message.Id); ok {
-
+				logger.Info("got call")
 				if callCh, ok := call.(chan *protocol.Message); ok {
-
+					logger.Info("got call channel")
 					callCh <- message
 				}
 			}
@@ -162,7 +209,7 @@ func (c *OperationClient) readLoopClient() {
 		}
 
 		resp := protocol.Message{
-			Id:     uuid.NewString(),
+			Id:     message.Id,
 			Type:   protocol.Resp,
 			Action: message.Action,
 			Data:   *respData,
@@ -201,6 +248,12 @@ func (c *OperationClient) writeLoopClient() {
 			}
 
 			mLen, err := writer.Write(msg)
+			if err != nil {
+				logger.Error(err)
+				c.closeCh <- true
+				return
+			}
+			err = writer.Close()
 			if err != nil {
 				logger.Error(err)
 				c.closeCh <- true

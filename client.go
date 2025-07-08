@@ -39,7 +39,6 @@ type Client struct {
 }
 
 func (s *OperationServer) makeClient(id string, conn *websocket.Conn) *Client {
-	logger.Info("add client")
 	cli := &Client{
 		id:   id,
 		conn: conn,
@@ -71,7 +70,10 @@ func (c *Client) run(s *OperationServer) {
 
 func (c *Client) readLoop(w WebSocketInstance) {
 
-	defer s.Remove(c.id)
+	defer func() {
+		s.Remove(c.id)
+		logger.Info("client closed")
+	}()
 
 	for {
 		_, msg, err := c.conn.ReadMessage()
@@ -120,7 +122,7 @@ func (c *Client) readLoop(w WebSocketInstance) {
 		}
 
 		resp := protocol.Message{
-			Id:     uuid.NewString(),
+			Id:     message.Id,
 			Type:   protocol.Resp,
 			Action: message.Action,
 			Data:   *respData,
@@ -166,6 +168,12 @@ func (c *Client) writeLoop() {
 				c.closeCh <- true
 				return
 			}
+			err = writer.Close()
+			if err != nil {
+				logger.Error(err)
+				c.closeCh <- true
+				return
+			}
 			logger.InfoF("send %s \nto %s", string(msg), c.id)
 
 		case <-c.pingCh:
@@ -186,6 +194,8 @@ func (c *Client) writeLoop() {
 				_ = c.conn.NetConn().Close()
 				break
 			}
+
+			break
 
 		}
 
