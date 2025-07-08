@@ -64,7 +64,7 @@ func (c *Client) getId() string {
 	return c.id
 }
 
-func (c *Client) run() {
+func (c *Client) run(s *OperationServer) {
 	go c.readLoop(s)
 	go c.writeLoop()
 }
@@ -239,8 +239,4 @@ func (c *Client) Call(action string, data any) (*protocol.Message, error) {
 
 	}
 
-}
-
-func (c *Client) getHandler(action string) Handler {
-	return c.handler[action]
 }

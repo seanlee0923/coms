@@ -1,5 +1,6 @@
 package coms
 
+import "C"
 import (
 	"encoding/json"
 	"errors"
@@ -10,11 +11,37 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
-func NewClient(id string, maxPendingCalls int) *Client {
-	cli := &Client{
+type OperationClient struct {
+	id      string
+	conn    *websocket.Conn
+	timeout protocol.TimeOutConfig
+
+	handler map[string]ClientHandler
+
+	pingCh     chan []byte
+	messageIn  chan []byte
+	messageOut chan []byte
+	closeCh    chan bool
+
+	connected bool
+
+	pendingCalls    sync.Map
+	pendingCnt      atomic.Int32
+	maxPendingCalls int
+
+	heartBeatPeriod time.Duration
+	collectPeriod   time.Duration
+}
+
+type ClientHandler func(*OperationClient, *protocol.Message) *json.RawMessage
+
+func NewClient(id string, maxPendingCalls int) *OperationClient {
+	cli := &OperationClient{
 		id: id,
 
 		pingCh:          make(chan []byte),
@@ -26,16 +53,16 @@ func NewClient(id string, maxPendingCalls int) *Client {
 	return cli
 }
 
-func (c *Client) SetTimeout(tc protocol.TimeOutConfig) {
+func (c *OperationClient) SetTimeout(tc protocol.TimeOutConfig) {
 	c.timeout = tc
 }
 
-func (c *Client) SetPeriod(collect, heartBeat time.Duration) {
+func (c *OperationClient) SetPeriod(collect, heartBeat time.Duration) {
 	c.collectPeriod = collect
 	c.heartBeatPeriod = heartBeat
 }
 
-func (c *Client) Start(addr string) error {
+func (c *OperationClient) Start(addr string) error {
 
 	if c.collectPeriod <= protocol.MinCollectDuration {
 		return errors.New("collect period too small")
@@ -54,12 +81,16 @@ func (c *Client) Start(addr string) error {
 	return nil
 }
 
-func (c *Client) heartBeat() {
+func (c *OperationClient) Send(action string, data any) (*protocol.Message, error) {
+	return nil, nil
+}
+
+func (c *OperationClient) heartBeat() {
 	ticker := time.NewTicker(c.heartBeatPeriod)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		resp, err := c.Call("HeartBeat", protocol.HeartBeatReq{})
+		resp, err := c.Send("HeartBeat", protocol.HeartBeatReq{})
 		if err != nil {
 			continue
 		}
@@ -73,14 +104,14 @@ func (c *Client) heartBeat() {
 	}
 }
 
-func (c *Client) start() {
-	go c.readLoopClient(c)
+func (c *OperationClient) start() {
+	go c.readLoopClient()
 	go c.writeLoopClient()
 	go c.collectStatus()
 	go c.heartBeat()
 }
 
-func (c *Client) readLoopClient(w WebSocketInstance) {
+func (c *OperationClient) readLoopClient() {
 	c.conn.SetPongHandler(func(appData string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(c.timeout.PongWait))
 	})
@@ -106,19 +137,19 @@ func (c *Client) readLoopClient(w WebSocketInstance) {
 			break
 		}
 
-		if message.Type == protocol.Resp {
-			logger.Info("got resp message")
+		if message.Type == protocol.Req {
+
 			if call, ok := c.pendingCalls.Load(message.Id); ok {
-				logger.Info("got call")
+
 				if callCh, ok := call.(chan *protocol.Message); ok {
-					logger.Info("got call channel")
+
 					callCh <- message
 				}
 			}
 			continue
 		}
 
-		h := w.getHandler(message.Action)
+		h := c.getHandler(message.Action)
 		if h == nil {
 			c.closeCh <- true
 			break
@@ -150,7 +181,7 @@ func (c *Client) readLoopClient(w WebSocketInstance) {
 
 }
 
-func (c *Client) writeLoopClient() {
+func (c *OperationClient) writeLoopClient() {
 
 	for {
 
@@ -201,7 +232,7 @@ func (c *Client) writeLoopClient() {
 	}
 }
 
-func (c *Client) collectStatus() {
+func (c *OperationClient) collectStatus() {
 	ticker := time.NewTicker(c.collectPeriod)
 
 	defer ticker.Stop()
@@ -212,7 +243,7 @@ func (c *Client) collectStatus() {
 			continue
 		}
 
-		resp, err := c.Call("Status", stats)
+		resp, err := c.Send("Status", stats)
 		if err != nil {
 			continue
 		}
@@ -258,4 +289,14 @@ func collect() (*protocol.StatusReq, error) {
 	}
 
 	return status, nil
+}
+
+func (c *OperationClient) getHandler(action string) ClientHandler {
+
+	h, ok := c.handler[action]
+	if ok {
+		return h
+	}
+
+	return nil
 }
