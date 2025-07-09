@@ -27,7 +27,7 @@ func Init() {
 var sugarLogger *zap.SugaredLogger
 
 func customTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	enc.AppendString(t.Format("2006/01/02-15:04:05.00"))
+	enc.AppendString(t.Format("2006/01/02-15:04:05.000"))
 }
 
 func customLevelEncoder(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
