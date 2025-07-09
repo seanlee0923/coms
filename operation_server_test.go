@@ -42,6 +42,33 @@ func TestServer(t *testing.T) {
 		return &rm
 	})
 
+	tServer.RegisterHandler("Login", func(client *Client, message *protocol.Message) *json.RawMessage {
+		var rm json.RawMessage
+
+		return &rm
+	})
+
+	tServer.RegisterHandler("HeartBeat", func(client *Client, message *protocol.Message) *json.RawMessage {
+		var rm json.RawMessage
+
+		resp := protocol.HeartBeatResp{
+			Ok: true,
+		}
+
+		msg, err := json.Marshal(&resp)
+		if err != nil {
+			logger.Error(err)
+			return nil
+		}
+
+		err = json.Unmarshal(msg, &rm)
+		if err != nil {
+			logger.Error(err)
+		}
+
+		return &rm
+	})
+
 	t.Log("register success")
 	if err := tServer.Start(nil); err != nil {
 		t.Error(err)

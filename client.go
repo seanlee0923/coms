@@ -28,7 +28,7 @@ type Client struct {
 	messageOut chan []byte
 	closeCh    chan bool
 
-	connected bool
+	authorized bool
 
 	pendingCalls    sync.Map
 	pendingCnt      atomic.Int32
@@ -93,16 +93,13 @@ func (c *Client) readLoop(w WebSocketInstance) {
 		}
 
 		if message == nil {
-			c.closeCh <- true
-			break
+			logger.Info("nil message")
+			continue
 		}
 
 		if message.Type == protocol.Resp {
-			logger.Info("got resp message")
 			if call, ok := c.pendingCalls.Load(message.Id); ok {
-				logger.Info("got call")
 				if callCh, ok := call.(chan *protocol.Message); ok {
-					logger.Info("got call channel")
 					callCh <- message
 				}
 			}
@@ -111,12 +108,13 @@ func (c *Client) readLoop(w WebSocketInstance) {
 
 		h := w.getHandler(message.Action)
 		if h == nil {
-			c.closeCh <- true
-			break
+			logger.Info("empty handler")
+			continue
 		}
 
 		respData := h(c, message)
 		if respData == nil {
+			logger.Error(errors.New("nil resp data"))
 			c.closeCh <- true
 			break
 		}
@@ -168,13 +166,13 @@ func (c *Client) writeLoop() {
 				c.closeCh <- true
 				return
 			}
+
 			err = writer.Close()
 			if err != nil {
 				logger.Error(err)
 				c.closeCh <- true
 				return
 			}
-			logger.InfoF("send %s \nto %s", string(msg), c.id)
 
 		case <-c.pingCh:
 

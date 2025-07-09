@@ -58,3 +58,7 @@ func Info(msg string) {
 func Error(err error) {
 	sugarLogger.Error(err.Error())
 }
+
+func Errorf(format string, args ...interface{}) {
+	sugarLogger.Errorf(format, args...)
+}

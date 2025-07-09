@@ -14,7 +14,9 @@ func TestClient(t *testing.T) {
 		ReadWait:   30 * time.Second,
 		WriteWait:  15 * time.Second,
 	})
-	err := c.Start("ws://localhost:9999/my-test/")
+
+	finCh := make(chan bool, 2)
+	err := c.Start("ws://localhost:9999/my-test/", finCh)
 	if err != nil {
 		t.Fatal(err)
 	}

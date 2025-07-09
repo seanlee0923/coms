@@ -2,6 +2,7 @@ package coms
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/seanlee0923/coms/logger"
 	"github.com/seanlee0923/coms/protocol"
@@ -66,6 +67,9 @@ func (s *OperationServer) getHandler(action string) Handler {
 }
 
 func (s *OperationServer) Start(h func(http.ResponseWriter, *http.Request)) error {
+	if s.getHandler("Login") == nil {
+		return errors.New("need to register Login handler")
+	}
 	if h == nil {
 		h = func(w http.ResponseWriter, r *http.Request) {
 			conn, err := s.u.Upgrade(w, r, nil)

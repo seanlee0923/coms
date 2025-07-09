@@ -34,6 +34,7 @@ type OperationClient struct {
 	pendingCnt      atomic.Int32
 	maxPendingCalls int
 
+	finCh           chan bool
 	heartBeatPeriod time.Duration
 	collectPeriod   time.Duration
 }
@@ -62,8 +63,7 @@ func (c *OperationClient) SetPeriod(collect, heartBeat time.Duration) {
 	c.heartBeatPeriod = heartBeat
 }
 
-func (c *OperationClient) Start(addr string) error {
-
+func (c *OperationClient) Start(addr string, finCh chan bool) error {
 	if c.collectPeriod <= protocol.MinCollectDuration {
 		return errors.New("collect period too small")
 	}
@@ -73,6 +73,9 @@ func (c *OperationClient) Start(addr string) error {
 	if c.timeout == (protocol.TimeOutConfig{}) {
 		return errors.New("need to set timeout config")
 	}
+	//if len(finCh) != 2 {
+	//	return errors.New("invalid finCh length")
+	//}
 
 	conn, _, err := websocket.DefaultDialer.Dial(addr+c.id, nil)
 	if err != nil {
@@ -80,7 +83,8 @@ func (c *OperationClient) Start(addr string) error {
 	}
 	c.conn = conn
 
-	go c.start()
+	go c.start(finCh)
+
 	return nil
 }
 
@@ -122,7 +126,6 @@ func (c *OperationClient) Send(action string, data any) (*protocol.Message, erro
 	select {
 
 	case resp := <-respCh:
-		logger.InfoF("resp : %v", string(resp.Data))
 		return resp, nil
 
 	case <-time.After(c.timeout.ReadWait):
@@ -137,37 +140,51 @@ func (c *OperationClient) heartBeat() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		resp, err := c.Send("HeartBeat", protocol.HeartBeatReq{})
-		if err != nil {
-			continue
-		}
-		var hb protocol.HeartBeatResp
-		err = json.Unmarshal(resp.Data, &hb)
-		if err != nil {
-			continue
+
+		select {
+
+		case <-ticker.C:
+			resp, err := c.Send("HeartBeat", protocol.HeartBeatReq{})
+			if err != nil {
+				continue
+			}
+
+			var hb protocol.HeartBeatResp
+			err = json.Unmarshal(resp.Data, &hb)
+			if err != nil {
+				continue
+			}
+
+		case <-c.finCh:
+
+			return
+
 		}
 
-		logger.InfoF("Heart Beat Status:%v", hb.Ok)
 	}
 }
 
-func (c *OperationClient) start() {
-	go c.readLoopClient()
-	go c.writeLoopClient()
+func (c *OperationClient) start(finCh chan bool) {
+	go c.readLoopClient(finCh)
+	go c.writeLoopClient(finCh)
 	go c.collectStatus()
 	go c.heartBeat()
 }
 
-func (c *OperationClient) readLoopClient() {
+func (c *OperationClient) readLoopClient(finCh chan bool) {
+
+	defer logger.Info("read break")
+
 	c.conn.SetPongHandler(func(appData string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(c.timeout.PongWait))
 	})
+
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		logger.InfoF("%s | %s", c.id, string(msg))
 
 		if err != nil {
-			logger.Error(err)
+			logger.Errorf("send true to close ch, %v", err)
 			c.closeCh <- true
 			return
 		}
@@ -198,12 +215,13 @@ func (c *OperationClient) readLoopClient() {
 
 		h := c.getHandler(message.Action)
 		if h == nil {
-			c.closeCh <- true
-			break
+			logger.Info("not found handler")
+			continue
 		}
 
 		respData := h(c, message)
 		if respData == nil {
+			logger.Info("nil resp data")
 			c.closeCh <- true
 			break
 		}
@@ -228,8 +246,9 @@ func (c *OperationClient) readLoopClient() {
 
 }
 
-func (c *OperationClient) writeLoopClient() {
+func (c *OperationClient) writeLoopClient(finCh chan bool) {
 
+	defer logger.Info("write break")
 	for {
 
 		select {
@@ -277,7 +296,8 @@ func (c *OperationClient) writeLoopClient() {
 			if err != nil {
 				logger.Error(err)
 				_ = c.conn.Close()
-				break
+				return
+
 			}
 
 		}
@@ -289,20 +309,27 @@ func (c *OperationClient) collectStatus() {
 	ticker := time.NewTicker(c.collectPeriod)
 
 	defer ticker.Stop()
+	for {
 
-	for range ticker.C {
-		stats, err := collect()
-		if err != nil {
-			continue
+		select {
+		case <-ticker.C:
+			stats, err := collect()
+			if err != nil {
+				continue
+			}
+
+			resp, err := c.Send("Status", stats)
+			if err != nil {
+				continue
+			}
+
+			logger.InfoF("status resp: %v", resp)
+
+		case <-c.finCh:
+			return
 		}
-
-		resp, err := c.Send("Status", stats)
-		if err != nil {
-			continue
-		}
-
-		logger.InfoF("status resp: %v", resp)
 	}
+
 }
 
 func collect() (*protocol.StatusReq, error) {
