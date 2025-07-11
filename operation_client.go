@@ -48,6 +48,7 @@ func NewClient(id string, maxPendingCalls int) *OperationClient {
 		pingCh:          make(chan []byte),
 		messageOut:      make(chan []byte),
 		closeCh:         make(chan bool),
+		finCh:           make(chan bool),
 		maxPendingCalls: maxPendingCalls,
 	}
 
@@ -165,13 +166,13 @@ func (c *OperationClient) heartBeat() {
 }
 
 func (c *OperationClient) start(finCh chan bool) {
-	go c.readLoopClient(finCh)
-	go c.writeLoopClient(finCh)
+	go c.readLoopClient()
+	go c.writeLoopClient()
 	go c.collectStatus()
 	go c.heartBeat()
 }
 
-func (c *OperationClient) readLoopClient(finCh chan bool) {
+func (c *OperationClient) readLoopClient() {
 
 	defer logger.Info("read break")
 
@@ -202,11 +203,11 @@ func (c *OperationClient) readLoopClient(finCh chan bool) {
 		}
 
 		if message.Type == protocol.Resp {
-			logger.Info("got resp message")
+
 			if call, ok := c.pendingCalls.Load(message.Id); ok {
-				logger.Info("got call")
+
 				if callCh, ok := call.(chan *protocol.Message); ok {
-					logger.Info("got call channel")
+
 					callCh <- message
 				}
 			}
@@ -246,7 +247,7 @@ func (c *OperationClient) readLoopClient(finCh chan bool) {
 
 }
 
-func (c *OperationClient) writeLoopClient(finCh chan bool) {
+func (c *OperationClient) writeLoopClient() {
 
 	defer logger.Info("write break")
 	for {
@@ -300,6 +301,8 @@ func (c *OperationClient) writeLoopClient(finCh chan bool) {
 
 			}
 
+			close(c.finCh)
+
 		}
 
 	}
@@ -318,12 +321,10 @@ func (c *OperationClient) collectStatus() {
 				continue
 			}
 
-			resp, err := c.Send("Status", stats)
+			_, err = c.Send("Status", stats)
 			if err != nil {
 				continue
 			}
-
-			logger.InfoF("status resp: %v", resp)
 
 		case <-c.finCh:
 			return
